@@ -1,0 +1,181 @@
+This is a **classic CORS + SSE + custom headers issue** 👍
+You’re very close — the error tells us exactly what’s missing.
+
+---
+
+## ❌ Error Meaning (In Simple Terms)
+
+Because you are sending **custom headers**:
+
+```http
+external_ref_id
+correlation_id
+```
+
+👉 The browser sends a **CORS preflight request (OPTIONS)**
+👉 Your Spring Boot API is **NOT responding with CORS headers for OPTIONS**
+
+So browser blocks it.
+
+---
+
+## ✅ CORRECT FIX (Production-Grade)
+
+You must allow:
+
+* `OPTIONS` method
+* Custom headers
+* `text/event-stream`
+
+---
+
+## ✅ Solution 1 (BEST): Global CORS Configuration
+
+### ✔ Create `CorsConfig.java`
+
+```java
+@Configuration
+public class CorsConfig {
+
+    @Bean
+    public WebMvcConfigurer corsConfigurer() {
+        return new WebMvcConfigurer() {
+
+            @Override
+            public void addCorsMappings(CorsRegistry registry) {
+                registry.addMapping("/api/**")
+                        .allowedOrigins("http://localhost:3000")
+                        .allowedMethods("GET", "OPTIONS")
+                        .allowedHeaders("*")
+                        .allowCredentials(true)
+                        .maxAge(3600);
+            }
+        };
+    }
+}
+```
+
+📌 This is **mandatory** when using:
+
+* SSE
+* Custom headers
+* Browser clients
+
+---
+
+## ✅ Solution 2 (Controller-Level – OK for Local)
+
+Add **both annotations**:
+
+```java
+@CrossOrigin(
+    origins = "http://localhost:3000",
+    allowedHeaders = "*",
+    methods = { RequestMethod.GET, RequestMethod.OPTIONS }
+)
+@RestController
+@RequestMapping("/api")
+public class StudentSseController {
+```
+
+⚠️ Not recommended for large apps, but works locally.
+
+---
+
+## 🔥 VERY IMPORTANT: Spring Security?
+
+If your project uses **Spring Security**, CORS must also be enabled there.
+
+### ✔ SecurityConfig.java
+
+```java
+@Bean
+SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    http
+        .cors()
+        .and()
+        .csrf().disable()
+        .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+
+    return http.build();
+}
+```
+
+Without this → **CORS WILL STILL FAIL**.
+
+---
+
+## 🔍 Why OPTIONS Matters Here
+
+Because you use:
+
+```ts
+headers: {
+  external_ref_id: "...",
+  correlation_id: "..."
+}
+```
+
+Browser does:
+
+```
+OPTIONS /api/stream
+```
+
+If Spring does not respond with:
+
+```
+Access-Control-Allow-Origin
+```
+
+❌ Browser blocks request
+
+---
+
+## 🧪 How to Verify Fix
+
+1️⃣ Restart Spring Boot
+2️⃣ Open browser dev tools → Network tab
+3️⃣ Look for **OPTIONS /api/stream**
+
+* Status: **200**
+* Has header:
+
+  ```
+  Access-Control-Allow-Origin: http://localhost:3000
+  ```
+
+4️⃣ Then **GET /api/stream** starts streaming
+
+---
+
+## ✅ Final Checklist
+
+| Item                   | Status |
+| ---------------------- | ------ |
+| Global CORS config     | ✅      |
+| OPTIONS allowed        | ✅      |
+| Custom headers allowed | ✅      |
+| Spring Security CORS   | ✅      |
+| Restart backend        | ✅      |
+
+---
+
+## 🧠 Pro Tip (SSE + CORS)
+
+For SSE APIs:
+
+* **Always global CORS**
+* **Never rely on @CrossOrigin alone**
+* **Test OPTIONS request first**
+
+---
+
+If you want next:
+
+* 🔁 Auto-reconnect SSE
+* 📊 Progress bar UI
+* 🔐 JWT + headers
+* ⚡ High-scale SSE tuning
+
+Just tell me 👍
